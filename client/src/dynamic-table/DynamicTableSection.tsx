@@ -11,8 +11,8 @@ import { Badge } from "../components/ui/badge";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Checkbox } from "../components/ui/checkbox";
-import { Plus, Trash2, Edit2, AlertTriangle, RefreshCw, X, Save } from "lucide-react";
-import { runSync } from "../sync/syncEngine";
+import { Plus, Trash2, Edit2, AlertTriangle, RefreshCw, X, Save, Upload } from "lucide-react";
+import { runPull, runPush } from "../sync/syncEngine";
 
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-quartz.css";
@@ -43,7 +43,8 @@ function useMediaQuery(query: string): boolean {
 
 export default function DynamicTableSection({ tableName, syncTableId }: { tableName: string; syncTableId: string }) {
   const [columns, setColumns] = useState<GridColumnConfig[]>([]);
-  const [syncing, setSyncing] = useState(false);
+  const [pulling, setPulling] = useState(false);
+  const [pushing, setPushing] = useState(false);
   const [editingRow, setEditingRow] = useState<{ pk?: string; data: Record<string, any> } | null>(null);
   
   const manifest = usePortalManifest();
@@ -59,12 +60,21 @@ export default function DynamicTableSection({ tableName, syncTableId }: { tableN
     [tableName]
   );
 
-  const handleManualSync = async () => {
-    setSyncing(true);
+  const handleManualPull = async () => {
+    setPulling(true);
     try {
-      await runSync(allTableNames);
+      await runPull(allTableNames);
     } finally {
-      setSyncing(false);
+      setPulling(false);
+    }
+  };
+
+  const handleManualPush = async () => {
+    setPushing(true);
+    try {
+      await runPush(allTableNames);
+    } finally {
+      setPushing(false);
     }
   };
 
@@ -179,9 +189,13 @@ export default function DynamicTableSection({ tableName, syncTableId }: { tableN
           <p className="text-zinc-400 text-sm">Offline sync-enabled business register configuration.</p>
         </div>
         <div className="flex gap-2 shrink-0">
-          <Button variant="outline" size="sm" onClick={handleManualSync} disabled={syncing}>
-            <RefreshCw className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
+          <Button variant="outline" size="sm" onClick={handleManualPull} disabled={pulling || pushing}>
+            <RefreshCw className={`h-4 w-4 ${pulling ? "animate-spin" : ""}`} />
             Sync Now
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleManualPush} disabled={pulling || pushing}>
+            <Upload className={`h-4 w-4 ${pushing ? "animate-bounce" : ""}`} />
+            Push Changes
           </Button>
           <Button size="sm" onClick={() => setEditingRow({ data: {} })}>
             <Plus className="h-4 w-4" />

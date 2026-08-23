@@ -5,7 +5,28 @@ import { useAuthStore } from "../auth/authStore";
 const BATCH_SIZE = 50;
 let syncRunning = false;
 
-export async function runSync(tableNames?: string[], options?: { pullOnly?: boolean }): Promise<void> {
+export async function runSync(tableNames?: string[]): Promise<void> {
+  await runPull(tableNames);
+}
+
+export async function runPull(tableNames?: string[]): Promise<void> {
+  if (syncRunning || !navigator.onLine || !useAuthStore.getState().accessToken) return;
+  syncRunning = true;
+  try {
+    let tablesToSync = tableNames;
+    if (!tablesToSync || tablesToSync.length === 0) {
+      const rows = await db.rows.toArray();
+      tablesToSync = Array.from(new Set(rows.map((r) => r.tableName)));
+    }
+    for (const tableName of tablesToSync) {
+      await pullTable(tableName);
+    }
+  } finally {
+    syncRunning = false;
+  }
+}
+
+export async function runPush(tableNames?: string[]): Promise<void> {
   if (syncRunning || !navigator.onLine || !useAuthStore.getState().accessToken) return;
   syncRunning = true;
   try {
@@ -13,16 +34,10 @@ export async function runSync(tableNames?: string[], options?: { pullOnly?: bool
     let tablesToSync = tableNames;
     if (!tablesToSync || tablesToSync.length === 0) {
       const outboxItems = await db.outbox.toArray();
-      const distinctOutbox = Array.from(new Set(outboxItems.map((o) => o.tableName)));
-      const rows = await db.rows.toArray();
-      const distinctRows = Array.from(new Set(rows.map((r) => r.tableName)));
-      tablesToSync = Array.from(new Set([...distinctOutbox, ...distinctRows]));
+      tablesToSync = Array.from(new Set(outboxItems.map((o) => o.tableName)));
     }
     for (const tableName of tablesToSync) {
-      if (!options?.pullOnly) {
-        await pushTable(clientId, tableName);
-      }
-      await pullTable(tableName);
+      await pushTable(clientId, tableName);
     }
   } finally {
     syncRunning = false;
@@ -72,14 +87,7 @@ async function applyPushResults(tableName: string, results: any[]): Promise<void
 
       if (result.status === "accepted") {
         await db.outbox.delete(result.operationId);
-        if (result.record) {
-          await db.rows.put({
-            compositeKey: rowKey(tableName, result.rowPk),
-            tableName, pk: result.rowPk, data: result.record,
-            version: result.serverVersion ?? 0, deleted: false,
-            syncState: "synced", updatedAtUtc: new Date().toISOString()
-          });
-        }
+        await db.rows.delete(rowKey(tableName, result.rowPk));
       } else if (result.status === "conflict") {
         await db.outbox.update(result.operationId, { status: "conflict", lastError: "Server record changed." });
         await db.rows.update(rowKey(tableName, result.rowPk), { syncState: "conflict" });
