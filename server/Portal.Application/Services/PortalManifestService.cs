@@ -3,7 +3,7 @@ using Portal.Domain.Repositories;
 
 namespace Portal.Application.Services;
 
-public sealed record PortalSectionDto(string Key, string Label, string Icon, string Route, string TableName, int Order);
+public sealed record PortalSectionDto(string Key, string Label, string Icon, string Route, string TableName, string SyncTableId, int Order);
 public sealed record PortalManifest(string PortalId, string Title, IReadOnlyList<PortalSectionDto> Sections);
 
 public interface IPortalManifestService
@@ -23,7 +23,7 @@ public sealed class PortalManifestService(IConfigRepository repo) : IPortalManif
             .Where(s => s.Roles.Any(userRoles.Contains))
             .Where(s => tableById.ContainsKey(s.SyncTableId))
             .OrderBy(s => s.DisplayOrder)
-            .Select(s => new PortalSectionDto(s.SectionKey, s.Label, s.Icon, s.Route, tableById[s.SyncTableId], s.DisplayOrder))
+            .Select(s => new PortalSectionDto(s.SectionKey, s.Label, s.Icon, s.Route, tableById[s.SyncTableId], s.SyncTableId, s.DisplayOrder))
             .ToList();
 
         return new PortalManifest("dynamic-portal", "Manufacturing Portal", visible);

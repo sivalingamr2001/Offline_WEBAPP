@@ -271,7 +271,7 @@ export default function PortalShell() {
                   <Route
                     key={section.key}
                     path={section.route}
-                    element={<DynamicTableSection tableName={section.tableName} syncTableId={section.key} />}
+                    element={<DynamicTableSection tableName={section.tableName} syncTableId={section.syncTableId} />}
                   />
                 ))}
 

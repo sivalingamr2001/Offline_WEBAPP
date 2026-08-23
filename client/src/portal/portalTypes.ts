@@ -4,6 +4,7 @@ export interface PortalSection {
   icon: string;
   route: string;
   tableName: string;
+  syncTableId: string;
   order: number;
 }
 
