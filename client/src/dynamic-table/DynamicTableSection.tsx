@@ -117,17 +117,27 @@ export default function DynamicTableSection({ tableName, syncTableId }: { tableN
       },
       ...dataCols,
       {
-        headerName: "",
-        width: 80,
+        headerName: "Actions",
+        width: 100,
         cellRenderer: (p: any) => (
-          <Button
-            size="sm"
-            variant="destructive"
-            className="h-7 w-7 p-0"
-            onClick={() => deleteRow(tableName, p.data.pk, allTableNames)}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
+          <div className="flex gap-2 items-center h-full py-1">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 w-7 p-0 border-zinc-750 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 cursor-pointer"
+              onClick={() => setEditingRow({ pk: p.data.pk, data: { ...p.data.data } })}
+            >
+              <Edit2 className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              className="h-7 w-7 p-0 cursor-pointer"
+              onClick={() => deleteRow(tableName, p.data.pk, allTableNames)}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </div>
         )
       }
     ];
@@ -167,51 +177,54 @@ export default function DynamicTableSection({ tableName, syncTableId }: { tableN
       </div>
 
       {editingRow && (
-        <Card className="glass border-zinc-800 max-w-lg mx-auto">
-          <form onSubmit={handleSaveForm}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-              <div>
-                <CardTitle className="text-lg">{editingRow.pk ? "Edit Record" : "Add Record"}</CardTitle>
-                <CardDescription>Enter values for configured fields.</CardDescription>
-              </div>
-              <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-zinc-400" onClick={() => setEditingRow(null)}>
-                <X className="h-4 w-4" />
-              </Button>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {columns
-                .filter((c) => c.isVisible && c.isEditable)
-                .map((c) => (
-                  <div key={c.columnName} className="space-y-1.5">
-                    <label className="text-xs font-semibold text-zinc-400">{c.displayLabel}</label>
-                    <Input
-                      value={editingRow.data[c.columnName] ?? ""}
-                      onChange={(e) =>
-                        setEditingRow((prev) =>
-                          prev
-                            ? {
-                                ...prev,
-                                data: { ...prev.data, [c.columnName]: e.target.value }
-                              }
-                            : null
-                        )
-                      }
-                      type={c.dataType === "number" ? "number" : "text"}
-                      placeholder={`Enter ${c.displayLabel}`}
-                    />
-                  </div>
-                ))}
-            </CardContent>
-            <CardFooter className="flex justify-end gap-2 border-t border-zinc-800/60 pt-6">
-              <Button type="button" variant="outline" onClick={() => setEditingRow(null)}>
-                Cancel
-              </Button>
-              <Button type="submit">
-                <Save className="h-4 w-4" /> Save Record
-              </Button>
-            </CardFooter>
-          </form>
-        </Card>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="fixed inset-0" onClick={() => setEditingRow(null)} />
+          <Card className="glass border-zinc-800 w-full max-w-lg shadow-2xl relative z-10 animate-in zoom-in-95 duration-200">
+            <form onSubmit={handleSaveForm}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+                <div>
+                  <CardTitle className="text-lg">{editingRow.pk ? "Edit Record" : "Add Record"}</CardTitle>
+                  <CardDescription>Enter values for configured fields.</CardDescription>
+                </div>
+                <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 cursor-pointer" onClick={() => setEditingRow(null)}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </CardHeader>
+              <CardContent className="space-y-4 max-h-[70vh] overflow-y-auto">
+                {columns
+                  .filter((c) => c.isVisible && c.isEditable)
+                  .map((c) => (
+                    <div key={c.columnName} className="space-y-1.5">
+                      <label className="text-xs font-semibold text-zinc-400">{c.displayLabel}</label>
+                      <Input
+                        value={editingRow.data[c.columnName] ?? ""}
+                        onChange={(e) =>
+                          setEditingRow((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  data: { ...prev.data, [c.columnName]: e.target.value }
+                                }
+                              : null
+                          )
+                        }
+                        type={c.dataType === "number" ? "number" : "text"}
+                        placeholder={`Enter ${c.displayLabel}`}
+                      />
+                    </div>
+                  ))}
+              </CardContent>
+              <CardFooter className="flex justify-end gap-2 border-t border-zinc-800/60 pt-6">
+                <Button type="button" variant="outline" className="cursor-pointer" onClick={() => setEditingRow(null)}>
+                  Cancel
+                </Button>
+                <Button type="submit" className="cursor-pointer">
+                  <Save className="h-4 w-4" /> Save Record
+                </Button>
+              </CardFooter>
+            </form>
+          </Card>
+        </div>
       )}
 
       {isMobile ? (
@@ -294,6 +307,7 @@ export default function DynamicTableSection({ tableName, syncTableId }: { tableN
           <CardContent className="p-0">
             <div className="ag-theme-quartz-dark" style={{ height: 500, width: "100%" }}>
               <AgGridReact
+                theme="legacy"
                 rowData={rows ?? []}
                 columnDefs={colDefs}
                 getRowId={(p) => p.data.compositeKey}
