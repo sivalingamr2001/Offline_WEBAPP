@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
 interface AuthState {
   accessToken: string | null;
@@ -9,11 +10,18 @@ interface AuthState {
   clearSession: () => void;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
-  accessToken: null,
-  displayName: null,
-  roles: [],
-  isRefreshing: false,
-  setSession: (accessToken, displayName, roles) => set({ accessToken, displayName, roles }),
-  clearSession: () => set({ accessToken: null, displayName: null, roles: [] })
-}));
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set) => ({
+      accessToken: null,
+      displayName: null,
+      roles: [],
+      isRefreshing: false,
+      setSession: (accessToken, displayName, roles) => set({ accessToken, displayName, roles }),
+      clearSession: () => set({ accessToken: null, displayName: null, roles: [] })
+    }),
+    {
+      name: "auth-session-storage"
+    }
+  )
+);

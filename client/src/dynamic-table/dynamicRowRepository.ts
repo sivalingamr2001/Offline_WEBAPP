@@ -1,10 +1,10 @@
-import { db, rowKey } from "../db/database";
+import { db, rowKey, generateUUID } from "../db/database";
 import { runSync } from "../sync/syncEngine";
 
 export async function saveRow(
   tableName: string, pk: string | undefined, payload: Record<string, unknown>, allTableNames: string[]
 ): Promise<string> {
-  const id = pk ?? crypto.randomUUID();
+  const id = pk ?? generateUUID();
   const now = new Date().toISOString();
 
   await db.transaction("rw", db.rows, db.outbox, async () => {
@@ -26,7 +26,7 @@ export async function saveRow(
       await db.outbox.update(existingOutbox.operationId, { payload, occurredAtUtc: now, nextAttemptAtUtc: now, status: "pending" });
     } else {
       await db.outbox.add({
-        operationId: crypto.randomUUID(), tableName, rowPk: id, operationType,
+        operationId: generateUUID(), tableName, rowPk: id, operationType,
         expectedVersion: previous?.version ?? null, payload, occurredAtUtc: now,
         attempts: 0, nextAttemptAtUtc: now, status: "pending"
       });
@@ -46,7 +46,7 @@ export async function deleteRow(tableName: string, pk: string, allTableNames: st
 
     await db.rows.update(key, { deleted: true, syncState: "pending" });
     await db.outbox.add({
-      operationId: crypto.randomUUID(), tableName, rowPk: pk, operationType: "delete",
+      operationId: generateUUID(), tableName, rowPk: pk, operationType: "delete",
       expectedVersion: existing.version, payload: null, occurredAtUtc: now,
       attempts: 0, nextAttemptAtUtc: now, status: "pending"
     });
