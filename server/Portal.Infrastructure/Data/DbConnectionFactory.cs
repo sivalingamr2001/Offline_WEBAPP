@@ -21,7 +21,7 @@ public class DbConnectionFactory : IDbConnectionFactory
     public DatabaseProvider DetectProvider(string connectionString)
     {
         var normalized = connectionString.ToLowerInvariant();
-        var looksOracle = normalized.Contains("oracle") || normalized.Contains("user id=") || normalized.Contains("data source=//");
+        var looksOracle = normalized.Contains("oracle") || normalized.Contains("user id=") || normalized.Contains("userid=") || normalized.Contains("data source=//") || normalized.Contains("datasource=");
         return looksOracle ? DatabaseProvider.Oracle : DatabaseProvider.Sqlite;
     }
 

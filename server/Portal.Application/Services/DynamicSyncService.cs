@@ -12,7 +12,7 @@ namespace Portal.Application.Services;
 public sealed class DynamicSyncService(
     IConfigRepository repo, IDynamicQueryExecutor executor, IConfiguration config)
 {
-    public async Task<PushResponse> PushAsync(string userId, string clientId, PushRequest request, CancellationToken ct)
+    public async Task<PushResponse> PushAsync(string userId, string? tenantId, string clientId, PushRequest request, CancellationToken ct)
     {
         var table = await ResolveTableAsync(request.TableName);
         var connection = await repo.GetConnectionAsync(table.ConnectionId)
@@ -21,13 +21,13 @@ public sealed class DynamicSyncService(
 
         var results = new List<OperationResultDto>(request.Operations.Count);
         foreach (var op in request.Operations)
-            results.Add(await ApplyOneAsync(userId, clientId, table, connection, gridColumns, op, ct));
+            results.Add(await ApplyOneAsync(userId, tenantId, clientId, table, connection, gridColumns, op, ct));
 
         return new PushResponse(results);
     }
 
     private async Task<OperationResultDto> ApplyOneAsync(
-        string userId, string clientId, SyncTableConfig table, DataConnection connection,
+        string userId, string? tenantId, string clientId, SyncTableConfig table, DataConnection connection,
         IReadOnlyList<GridColumnConfig> gridColumns, SyncOperationDto op, CancellationToken ct)
     {
         using var configDb = new SqliteConnection(config.GetConnectionString("Default"));
@@ -38,15 +38,15 @@ public sealed class DynamicSyncService(
         if (existingOp is not null)
             return JsonSerializer.Deserialize<OperationResultDto>(existingOp)!;
 
-        var provider = DetectProvider(connection.ConnectionString);
+        var provider = DetectProvider(connection);
 
         OperationResultDto result;
         try
         {
             result = op.OperationType.ToLowerInvariant() switch
             {
-                "create" when table.AllowCreate => await CreateAsync(configDb, table, provider, connection.ConnectionString, gridColumns, userId, op, ct),
-                "update" when table.AllowUpdate => await UpdateAsync(configDb, table, provider, connection.ConnectionString, gridColumns, userId, op, ct),
+                "create" when table.AllowCreate => await CreateAsync(configDb, table, provider, connection.ConnectionString, gridColumns, userId, tenantId, op, ct),
+                "update" when table.AllowUpdate => await UpdateAsync(configDb, table, provider, connection.ConnectionString, gridColumns, userId, tenantId, op, ct),
                 "delete" when table.AllowDelete => await DeleteAsync(configDb, table, provider, connection.ConnectionString, userId, op, ct),
                 _ => new OperationResultDto(op.OperationId, "validationFailed", op.RowPk, $"Operation '{op.OperationType}' is not permitted on this table.")
             };
@@ -79,18 +79,40 @@ public sealed class DynamicSyncService(
 
     private async Task<OperationResultDto> CreateAsync(
         System.Data.IDbConnection configDb, SyncTableConfig table, DatabaseProvider provider, string connectionString, 
-        IReadOnlyList<GridColumnConfig> gridColumns, string userId, SyncOperationDto op, CancellationToken ct)
+        IReadOnlyList<GridColumnConfig> gridColumns, string userId, string? tenantId, SyncOperationDto op, CancellationToken ct)
     {
         if (op.Payload is null) return new(op.OperationId, "validationFailed", op.RowPk, "Payload is required for create.");
 
         var payload = op.Payload.Value;
-        var columnNames = new List<string> { table.PrimaryKeyColumn };
-        var paramMap = new Dictionary<string, object?> { [table.PrimaryKeyColumn] = op.RowPk };
+
+        // Check if the primary key is numeric and client RowPk is a Guid string (temporary local ID)
+        var pkCol = gridColumns.FirstOrDefault(c => string.Equals(c.ColumnName, table.PrimaryKeyColumn, StringComparison.OrdinalIgnoreCase));
+        bool isPkNumeric = pkCol?.DataType?.ToLowerInvariant() == "number" || table.PrimaryKeyColumn.Equals("id", StringComparison.OrdinalIgnoreCase);
+        bool isPkGuid = Guid.TryParse(op.RowPk, out _);
+
+        var columnNames = new List<string>();
+        var paramMap = new Dictionary<string, object?>();
+
+        // Only include the primary key if it is not numeric, or if the client rowPk is not a Guid
+        if (!(isPkNumeric && isPkGuid))
+        {
+            columnNames.Add(table.PrimaryKeyColumn);
+            paramMap[table.PrimaryKeyColumn] = op.RowPk;
+        }
+
+        // Automatically append the tenant column if configured and tenantId is present
+        if (!string.IsNullOrEmpty(table.TenantColumn) && !string.IsNullOrEmpty(tenantId))
+        {
+            columnNames.Add(table.TenantColumn);
+            paramMap[table.TenantColumn] = tenantId;
+        }
 
         var editableColumns = gridColumns.Where(c => c.IsEditable).ToList();
         foreach (var col in editableColumns)
         {
             if (!payload.TryGetProperty(col.ColumnName, out var val)) continue;
+            // Avoid duplicates if the tenant column is also editable
+            if (columnNames.Contains(col.ColumnName)) continue;
             columnNames.Add(col.ColumnName);
             paramMap[col.ColumnName] = ParseParamValue(val, col.DataType, provider);
         }
@@ -115,7 +137,7 @@ public sealed class DynamicSyncService(
 
     private async Task<OperationResultDto> UpdateAsync(
         System.Data.IDbConnection configDb, SyncTableConfig table, DatabaseProvider provider, string connectionString,
-        IReadOnlyList<GridColumnConfig> gridColumns, string userId, SyncOperationDto op, CancellationToken ct)
+        IReadOnlyList<GridColumnConfig> gridColumns, string userId, string? tenantId, SyncOperationDto op, CancellationToken ct)
     {
         if (op.ExpectedVersion is null || op.Payload is null)
             return new(op.OperationId, "validationFailed", op.RowPk, "expectedVersion and payload are required for update.");
@@ -215,7 +237,7 @@ public sealed class DynamicSyncService(
 
             var connection = await repo.GetConnectionAsync(table.ConnectionId)
                 ?? throw new InvalidOperationException("Connection not found.");
-            var provider = DetectProvider(connection.ConnectionString);
+            var provider = DetectProvider(connection);
 
             var selectSql = $"SELECT * FROM \"{table.TableName}\"";
             var dynamicParams = new DynamicParameters();
@@ -297,10 +319,15 @@ public sealed class DynamicSyncService(
             new { tableId, rowPk, changeType, recordJson = record is null ? null : JsonSerializer.Serialize(record), now = DateTime.UtcNow.ToString("o") });
     }
 
-    private static DatabaseProvider DetectProvider(string connectionString)
+    private static DatabaseProvider DetectProvider(DataConnection connection)
     {
-        var normalized = connectionString.ToLowerInvariant();
-        var looksOracle = normalized.Contains("oracle") || normalized.Contains("user id=") || normalized.Contains("data source=//");
+        if (string.Equals(connection.Provider, "oracle", StringComparison.OrdinalIgnoreCase))
+            return DatabaseProvider.Oracle;
+        if (string.Equals(connection.Provider, "sqlite", StringComparison.OrdinalIgnoreCase))
+            return DatabaseProvider.Sqlite;
+
+        var normalized = connection.ConnectionString.ToLowerInvariant();
+        var looksOracle = normalized.Contains("oracle") || normalized.Contains("user id=") || normalized.Contains("userid=") || normalized.Contains("data source=//") || normalized.Contains("datasource=");
         return looksOracle ? DatabaseProvider.Oracle : DatabaseProvider.Sqlite;
     }
 

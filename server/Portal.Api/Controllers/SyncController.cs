@@ -15,9 +15,10 @@ public sealed class SyncController(DynamicSyncService syncService) : ControllerB
     public async Task<IActionResult> Push([FromBody] PushRequest request, CancellationToken ct)
     {
         var username = User.FindFirstValue(ClaimTypes.Name) ?? "anonymous";
+        var tenantId = User.FindFirstValue("TenantId");
         try
         {
-            var res = await syncService.PushAsync(username, request.ClientId, request, ct);
+            var res = await syncService.PushAsync(username, tenantId, request.ClientId, request, ct);
             return Ok(res);
         }
         catch (Exception ex)
