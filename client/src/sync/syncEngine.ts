@@ -5,7 +5,7 @@ import { useAuthStore } from "../auth/authStore";
 const BATCH_SIZE = 50;
 let syncRunning = false;
 
-export async function runSync(tableNames?: string[]): Promise<void> {
+export async function runSync(tableNames?: string[], options?: { pullOnly?: boolean }): Promise<void> {
   if (syncRunning || !navigator.onLine || !useAuthStore.getState().accessToken) return;
   syncRunning = true;
   try {
@@ -19,7 +19,9 @@ export async function runSync(tableNames?: string[]): Promise<void> {
       tablesToSync = Array.from(new Set([...distinctOutbox, ...distinctRows]));
     }
     for (const tableName of tablesToSync) {
-      await pushTable(clientId, tableName);
+      if (!options?.pullOnly) {
+        await pushTable(clientId, tableName);
+      }
       await pullTable(tableName);
     }
   } finally {

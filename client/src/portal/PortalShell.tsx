@@ -64,7 +64,7 @@ export default function PortalShell() {
 
   useEffect(() => {
     if (!manifest) return;
-    void runSync(manifest.sections.map((s) => s.tableName));
+    void runSync(manifest.sections.map((s) => s.tableName), { pullOnly: true });
   }, [manifest]);
 
   const handleLogout = async () => {

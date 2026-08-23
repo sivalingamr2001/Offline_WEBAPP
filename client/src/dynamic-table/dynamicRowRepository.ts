@@ -1,8 +1,7 @@
 import { db, rowKey, generateUUID } from "../db/database";
-import { runSync } from "../sync/syncEngine";
 
 export async function saveRow(
-  tableName: string, pk: string | undefined, payload: Record<string, unknown>, allTableNames: string[]
+  tableName: string, pk: string | undefined, payload: Record<string, unknown>, _allTableNames: string[]
 ): Promise<string> {
   const id = pk ?? generateUUID();
   const now = new Date().toISOString();
@@ -33,11 +32,10 @@ export async function saveRow(
     }
   });
 
-  void runSync(allTableNames);
   return id;
 }
 
-export async function deleteRow(tableName: string, pk: string, allTableNames: string[]): Promise<void> {
+export async function deleteRow(tableName: string, pk: string, _allTableNames: string[]): Promise<void> {
   const now = new Date().toISOString();
   await db.transaction("rw", db.rows, db.outbox, async () => {
     const key = rowKey(tableName, pk);
@@ -51,17 +49,16 @@ export async function deleteRow(tableName: string, pk: string, allTableNames: st
       attempts: 0, nextAttemptAtUtc: now, status: "pending"
     });
   });
-  void runSync(allTableNames);
 }
 
-export async function resolveConflictKeepLocal(tableName: string, pk: string, allTableNames: string[]): Promise<void> {
+export async function resolveConflictKeepLocal(tableName: string, pk: string, _allTableNames: string[]): Promise<void> {
   const key = rowKey(tableName, pk);
   const row = await db.rows.get(key);
   if (!row) return;
-  await saveRow(tableName, pk, row.data, allTableNames);
+  await saveRow(tableName, pk, row.data, _allTableNames);
 }
 
-export async function resolveConflictKeepServer(tableName: string, pk: string, allTableNames: string[]): Promise<void> {
+export async function resolveConflictKeepServer(tableName: string, pk: string, _allTableNames: string[]): Promise<void> {
   await db.transaction("rw", db.rows, db.outbox, async () => {
     const stuck = await db.outbox
       .where("[tableName+status]").equals([tableName, "conflict"])
@@ -75,5 +72,4 @@ export async function resolveConflictKeepServer(tableName: string, pk: string, a
     const key = rowKey(tableName, pk);
     await db.rows.update(key, { syncState: "synced" });
   });
-  void runSync(allTableNames);
 }
