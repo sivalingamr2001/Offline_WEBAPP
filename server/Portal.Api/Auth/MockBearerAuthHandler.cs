@@ -1,47 +1,72 @@
 using System.Security.Claims;
 using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Portal.Api.Auth;
 
-public sealed class MockBearerAuthHandler(
-    IOptionsMonitor<AuthenticationSchemeOptions> options,
-    ILoggerFactory logger,
-    UrlEncoder encoder) : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
+public class MockBearerAuthOptions : AuthenticationSchemeOptions { }
+
+public class MockBearerAuthHandler : SignInAuthenticationHandler<MockBearerAuthOptions>
 {
-    public const string SchemeName = "MockBearer";
+    private static readonly Dictionary<string, ClaimsPrincipal> Sessions = new(StringComparer.OrdinalIgnoreCase);
+
+    public MockBearerAuthHandler(
+        IOptionsMonitor<MockBearerAuthOptions> options,
+        ILoggerFactory logger,
+        UrlEncoder encoder) : base(options, logger, encoder)
+    {
+    }
 
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
-        if (!Request.Headers.TryGetValue("Authorization", out var header) ||
-            !header.ToString().StartsWith("Bearer mock-token-", StringComparison.OrdinalIgnoreCase))
+        var authHeader = Request.Headers.Authorization.ToString();
+        if (string.IsNullOrWhiteSpace(authHeader) || !authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
         {
-            return Task.FromResult(AuthenticateResult.Fail("Missing or malformed mock bearer token."));
+            var cookie = Request.Cookies["MockSession"];
+            if (cookie is not null && Sessions.TryGetValue(cookie, out var cookiePrincipal))
+            {
+                var cookieTicket = new AuthenticationTicket(cookiePrincipal, Scheme.Name);
+                return Task.FromResult(AuthenticateResult.Success(cookieTicket));
+            }
+            return Task.FromResult(AuthenticateResult.Fail("Missing authorization header or session cookie."));
         }
 
-        var raw = header.ToString()["Bearer mock-token-".Length..];
-        var parts = raw.Split('-');
-        if (parts.Length < 3)
-            return Task.FromResult(AuthenticateResult.Fail("Malformed mock token payload."));
-
-        var username = parts[0];
-        var rolesCsv = parts[1];
-        var tenantId = parts[2];
-
-        var claims = new List<Claim>
+        var token = authHeader.Substring("Bearer ".Length).Trim();
+        if (Sessions.TryGetValue(token, out var principal))
         {
-            new(ClaimTypes.NameIdentifier, username),
-            new(ClaimTypes.Name, username),
-            new("username", username),
-            new("tenant_id", tenantId),
-            new("display_name", username.ToUpper())
-        };
-        claims.AddRange(rolesCsv.Split(',', StringSplitOptions.RemoveEmptyEntries)
-            .Select(r => new Claim(ClaimTypes.Role, r)));
+            var ticket = new AuthenticationTicket(principal, Scheme.Name);
+            return Task.FromResult(AuthenticateResult.Success(ticket));
+        }
 
-        var identity = new ClaimsIdentity(claims, SchemeName);
-        var principal = new ClaimsPrincipal(identity);
-        return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(principal, SchemeName)));
+        return Task.FromResult(AuthenticateResult.Fail("Invalid session token."));
+    }
+
+    protected override Task HandleSignInAsync(ClaimsPrincipal user, AuthenticationProperties? properties)
+    {
+        var token = "mock-token-xyz-123";
+        Sessions[token] = user;
+
+        Response.Cookies.Append("MockSession", token, new CookieOptions
+        {
+            HttpOnly = true,
+            SameSite = SameSiteMode.None,
+            Secure = true,
+            Expires = DateTimeOffset.UtcNow.AddHours(1)
+        });
+
+        return Task.CompletedTask;
+    }
+
+    protected override Task HandleSignOutAsync(AuthenticationProperties? properties)
+    {
+        var cookie = Request.Cookies["MockSession"];
+        if (cookie is not null)
+        {
+            Sessions.Remove(cookie);
+            Response.Cookies.Delete("MockSession");
+        }
+        return Task.CompletedTask;
     }
 }

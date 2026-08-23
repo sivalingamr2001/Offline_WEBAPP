@@ -1,45 +1,51 @@
-using Portal.Api.Admin;
+using Portal.Domain.Repositories;
+using Portal.Application.Services;
+using Portal.Infrastructure.Data;
+using Portal.Infrastructure.Repositories;
 using Portal.Api.Auth;
-using Portal.Api.Data;
-using Portal.Api.Data2;
-using Portal.Api.Portal;
-using Portal.Api.Schema;
-using Portal.Api.Sync;
-using DynamicTransaction;
+using DynamicTransaction.Services;
+using DynamicTransaction.Interfaces;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var defaultConnectionString = builder.Configuration.GetConnectionString("Default") 
-    ?? "Data Source=portal.db";
-SqliteBootstrap.EnsureConfigStoreCreated(defaultConnectionString);
+// Bootstrap SQLite settings database configuration
+SqliteBootstrap.Initialize(builder.Configuration);
 
-builder.Services.AddDynamicQueryInfrastructure<DbConnectionFactory>();
-builder.Services.AddScoped<ConfigRepository>();
+// Add services to the container
+builder.Services.AddControllers();
+
+// Clean Architecture Dependency Injection mappings
+builder.Services.AddSingleton<IDbConnectionFactory, DbConnectionFactory>();
+builder.Services.AddSingleton<IDynamicQueryExecutor, DynamicQueryExecutor>();
+builder.Services.AddScoped<IConfigRepository, ConfigRepository>();
+builder.Services.AddScoped<IPortalManifestService, PortalManifestService>();
 builder.Services.AddScoped<ISchemaIntrospectionService, SchemaIntrospectionService>();
 builder.Services.AddScoped<DynamicSyncService>();
-builder.Services.AddScoped<IPortalManifestService, PortalManifestService>();
 
-builder.Services.AddAuthentication(MockBearerAuthHandler.SchemeName)
-    .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, MockBearerAuthHandler>(
-        MockBearerAuthHandler.SchemeName, _ => { });
-builder.Services.AddAuthorization();
-
+// CORS policies to support React client integration
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("PortalClient", policy => policy
-        .WithOrigins(builder.Configuration["Client:Origin"] ?? "http://localhost:3000")
-        .AllowAnyHeader()
-        .AllowAnyMethod()
-        .AllowCredentials());
+    options.AddPolicy("AllowClient", policy =>
+    {
+        policy.WithOrigins(builder.Configuration["Cors:Origin"] ?? "http://localhost:5173")
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials();
+    });
 });
 
-builder.Services.AddControllers();
+// Setup mock authentication cookies and tokens
+builder.Services.AddAuthentication("MockBearer")
+    .AddScheme<MockBearerAuthOptions, MockBearerAuthHandler>("MockBearer", null);
+
+builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
-app.UseCors("PortalClient");
+app.UseCors("AllowClient");
 app.UseAuthentication();
 app.UseAuthorization();
+
 app.MapControllers();
 
 app.Run();

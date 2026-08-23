@@ -5,11 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Oracle.ManagedDataAccess.Core" Version="23.6.0" />
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.0" />
-    <PackageReference Include="Dapper" Version="2.1.79" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\DynamicTransaction\DynamicTransaction.csproj" />
+    <ProjectReference Include="..\Portal.Application\Portal.Application.csproj" />
+    <ProjectReference Include="..\Portal.Infrastructure\Portal.Infrastructure.csproj" />
   </ItemGroup>
 </Project>
