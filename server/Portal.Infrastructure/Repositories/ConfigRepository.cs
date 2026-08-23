@@ -161,4 +161,10 @@ public sealed class ConfigRepository(IConfiguration config) : IConfigRepository
                      ROUTE as Route, DISPLAY_ORDER as DisplayOrder, ROLES_CSV as RolesCsv, IS_ENABLED as IsEnabled
               FROM PORTAL_SECTION_CONFIG WHERE IS_ENABLED = 1 ORDER BY DISPLAY_ORDER")).ToList();
     }
+
+    public async Task DeleteSectionAsync(string id)
+    {
+        using var db = Open();
+        await db.ExecuteAsync("DELETE FROM PORTAL_SECTION_CONFIG WHERE ID = @Id", new { Id = id });
+    }
 }

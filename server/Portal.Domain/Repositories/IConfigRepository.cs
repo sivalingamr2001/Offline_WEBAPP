@@ -14,4 +14,5 @@ public interface IConfigRepository
     Task<IReadOnlyList<GridColumnConfig>> GetGridColumnsAsync(string syncTableId);
     Task<PortalSectionConfig> UpsertSectionAsync(PortalSectionConfig section);
     Task<IReadOnlyList<PortalSectionConfig>> ListSectionsAsync();
+    Task DeleteSectionAsync(string id);
 }

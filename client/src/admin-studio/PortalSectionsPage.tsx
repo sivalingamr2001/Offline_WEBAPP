@@ -4,10 +4,11 @@ import { Button } from "../components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Select } from "../components/ui/select";
-import { Navigation } from "lucide-react";
+import { Navigation, Trash2 } from "lucide-react";
 
 export default function PortalSectionsPage() {
   const [tables, setTables] = useState<any[]>([]);
+  const [sections, setSections] = useState<any[]>([]);
   const [syncTableId, setSyncTableId] = useState("");
   const [tableSearch, setTableSearch] = useState("");
   const [sectionKey, setSectionKey] = useState("");
@@ -21,7 +22,14 @@ export default function PortalSectionsPage() {
     apiFetch("/api/admin/sync-tables")
       .then((r) => r.json())
       .then(setTables);
+    fetchSections();
   }, []);
+
+  function fetchSections() {
+    apiFetch("/api/admin/portal-sections")
+      .then((r) => r.json())
+      .then(setSections);
+  }
 
   async function handleAddSection(e: React.FormEvent) {
     e.preventDefault();
@@ -45,6 +53,7 @@ export default function PortalSectionsPage() {
         setSectionKey("");
         setLabel("");
         setRoute("");
+        fetchSections();
         alert(`Portal Section "${label}" created successfully. Changes will display in sidebar on reload.`);
       }
     } catch {} finally {
@@ -52,10 +61,20 @@ export default function PortalSectionsPage() {
     }
   }
 
+  async function handleDeleteSection(id: string) {
+    if (!confirm("Are you sure you want to delete this navigation section?")) return;
+    try {
+      const res = await apiFetch(`/api/admin/portal-sections/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        fetchSections();
+      }
+    } catch {}
+  }
+
   const filteredTables = tables.filter((t) => t.tableName.toLowerCase().includes(tableSearch.toLowerCase()));
 
   return (
-    <div className="space-y-6 max-w-xl mx-auto">
+    <div className="space-y-6 max-w-xl mx-auto pb-10">
       <div>
         <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-violet-400 to-indigo-200 bg-clip-text text-transparent">Portal Section Bindings</h1>
         <p className="text-zinc-400 text-sm">Add navigation entries and bind them to your synced offline tables with security role access.</p>
@@ -116,6 +135,7 @@ export default function PortalSectionsPage() {
                 <option value="users">Users</option>
                 <option value="database">Database</option>
                 <option value="settings">Settings</option>
+                <option value="layers">Layers</option>
               </Select>
             </div>
 
@@ -140,12 +160,47 @@ export default function PortalSectionsPage() {
             </div>
           </CardContent>
           <CardFooter className="border-t border-zinc-800/60 pt-6">
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button type="submit" className="w-full cursor-pointer" disabled={loading}>
               <Navigation className="h-4 w-4" />
               {loading ? "Adding..." : "Add Navigation Link"}
             </Button>
           </CardFooter>
         </form>
+      </Card>
+
+      <Card className="glass border-zinc-800">
+        <CardHeader>
+          <CardTitle>Active Menu Links</CardTitle>
+          <CardDescription>View and manage all active workstation navigation links.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {sections.length === 0 ? (
+            <p className="text-zinc-500 text-sm text-center py-4">No custom navigation links created yet.</p>
+          ) : (
+            sections.map((s) => {
+              const matchedTable = tables.find((t) => t.id === s.syncTableId)?.tableName ?? "Unknown Sync Table";
+              return (
+                <div key={s.id} className="flex items-center justify-between p-3 rounded-lg border border-zinc-800/60 bg-zinc-950/20">
+                  <div className="min-w-0 flex-1 pr-4">
+                    <h4 className="font-semibold text-sm text-zinc-100 truncate">{s.label}</h4>
+                    <p className="text-xs text-zinc-400 truncate">
+                      Route: <code className="text-zinc-300">{s.route}</code> | Table: <span className="text-zinc-300">{matchedTable}</span>
+                    </p>
+                    <p className="text-[10px] text-zinc-500 mt-0.5">Key: {s.sectionKey} | Roles: {s.rolesCsv}</p>
+                  </div>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="h-8 w-8 p-0 cursor-pointer shrink-0"
+                    onClick={() => handleDeleteSection(s.id)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              );
+            })
+          )}
+        </CardContent>
       </Card>
     </div>
   );
