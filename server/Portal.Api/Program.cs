@@ -2,7 +2,6 @@ using Portal.Domain.Repositories;
 using Portal.Application.Services;
 using Portal.Infrastructure.Data;
 using Portal.Infrastructure.Repositories;
-using Portal.Api.Auth;
 using DynamicTransaction.Services;
 using DynamicTransaction.Interfaces;
 

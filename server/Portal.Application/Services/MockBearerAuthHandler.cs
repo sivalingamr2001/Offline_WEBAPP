@@ -1,10 +1,11 @@
 using System.Security.Claims;
 using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Portal.Api.Auth;
+namespace Portal.Application.Services;
 
 public class MockBearerAuthOptions : AuthenticationSchemeOptions { }
 

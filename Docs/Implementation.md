@@ -42,7 +42,8 @@ solution/
 │   │   └── Services/
 │   │       ├── DynamicSyncService.cs
 │   │       ├── PortalManifestService.cs
-│   │       └── SchemaIntrospectionService.cs
+│   │       ├── SchemaIntrospectionService.cs
+│   │       └── MockBearerAuthHandler.cs
 │   ├── Portal.Infrastructure/
 │   │   ├── Portal.Infrastructure.csproj
 │   │   ├── Data/
@@ -65,8 +66,6 @@ solution/
 │       │   ├── SyncController.cs
 │       │   ├── PortalController.cs
 │       │   └── AuthController.cs
-│       └── Auth/
-│           └── MockBearerAuthHandler.cs
 └── client/
     ├── package.json
     ├── vite.config.ts
