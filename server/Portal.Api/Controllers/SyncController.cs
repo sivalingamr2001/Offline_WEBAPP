@@ -15,8 +15,15 @@ public sealed class SyncController(DynamicSyncService syncService) : ControllerB
     public async Task<IActionResult> Push([FromBody] PushRequest request, CancellationToken ct)
     {
         var username = User.FindFirstValue(ClaimTypes.Name) ?? "anonymous";
-        var res = await syncService.PushAsync(username, request.ClientId, request, ct);
-        return Ok(res);
+        try
+        {
+            var res = await syncService.PushAsync(username, request.ClientId, request, ct);
+            return Ok(res);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     [HttpGet("pull")]
@@ -27,7 +34,14 @@ public sealed class SyncController(DynamicSyncService syncService) : ControllerB
         CancellationToken ct = default)
     {
         var tenantId = User.FindFirstValue("TenantId");
-        var res = await syncService.PullAsync(tableName, cursor, limit, tenantId, ct);
-        return Ok(res);
+        try
+        {
+            var res = await syncService.PullAsync(tableName, cursor, limit, tenantId, ct);
+            return Ok(res);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 }
