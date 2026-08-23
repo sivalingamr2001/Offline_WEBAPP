@@ -27,8 +27,12 @@ export default function PortalSectionsPage() {
 
   function fetchSections() {
     apiFetch("/api/admin/portal-sections")
-      .then((r) => r.json())
-      .then(setSections);
+      .then((r) => {
+        if (!r.ok) throw new Error("Failed to load sections.");
+        return r.json();
+      })
+      .then(setSections)
+      .catch(() => setSections([]));
   }
 
   async function handleAddSection(e: React.FormEvent) {
