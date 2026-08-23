@@ -136,7 +136,7 @@ public sealed class DynamicSyncService(
 
         var payload = op.Payload.Value;
         var setClauses = new List<string>();
-        var paramMap = new Dictionary<string, object?> { ["__pk"] = op.RowPk };
+        var paramMap = new Dictionary<string, object?> { ["rowPkVal"] = op.RowPk };
 
         var editableColumns = gridColumns.Where(c => c.IsEditable).ToList();
         foreach (var col in editableColumns)
@@ -147,7 +147,7 @@ public sealed class DynamicSyncService(
         }
         if (setClauses.Count == 0) return new(op.OperationId, "validationFailed", op.RowPk, "No editable columns in payload.");
 
-        var updateSql = $"UPDATE \"{table.TableName}\" SET {string.Join(", ", setClauses)} WHERE \"{table.PrimaryKeyColumn}\" = {(provider == DatabaseProvider.Oracle ? ":" : "@")}__pk";
+        var updateSql = $"UPDATE \"{table.TableName}\" SET {string.Join(", ", setClauses)} WHERE \"{table.PrimaryKeyColumn}\" = {(provider == DatabaseProvider.Oracle ? ":" : "@")}rowPkVal";
 
         var dynamicParams = new DynamicParameters();
         foreach (var kvp in paramMap)
