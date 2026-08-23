@@ -200,11 +200,49 @@ public sealed class DynamicSyncService(
         return new(op.OperationId, "accepted", op.RowPk, ServerVersion: newVersion);
     }
 
-    public async Task<PullResponse> PullAsync(string tableName, long cursor, int limit, CancellationToken ct)
+    public async Task<PullResponse> PullAsync(string tableName, long cursor, int limit, string? tenantId, CancellationToken ct)
     {
         var table = await ResolveTableAsync(tableName);
         using var configDb = new SqliteConnection(config.GetConnectionString("Default"));
         configDb.Open();
+
+        if (cursor == 0)
+        {
+            var maxCursor = await configDb.QuerySingleOrDefaultAsync<long?>(
+                "SELECT MAX(SERVER_CURSOR) FROM SYNC_CHANGE WHERE SYNC_TABLE_ID = @tableId",
+                new { tableId = table.Id }) ?? 0L;
+
+            var connection = await repo.GetConnectionAsync(table.ConnectionId)
+                ?? throw new InvalidOperationException("Connection not found.");
+            var provider = DetectProvider(connection.ConnectionString);
+
+            var selectSql = $"SELECT * FROM \"{table.TableName}\"";
+            var dynamicParams = new DynamicParameters();
+            if (!string.IsNullOrEmpty(table.TenantColumn) && !string.IsNullOrEmpty(tenantId))
+            {
+                selectSql += $" WHERE \"{table.TenantColumn}\" = {(provider == DatabaseProvider.Oracle ? ":" : "@")}tenantId";
+                dynamicParams.Add("tenantId", tenantId);
+            }
+
+            var physicalRows = (await executor.QueryAsync<dynamic>(selectSql, dynamicParams, connectionString: connection.ConnectionString, cancellationToken: ct)).ToList();
+            var changes = new List<ChangeDto>();
+            long mockCursor = 1;
+            foreach (var row in physicalRows)
+            {
+                var rowDict = (IDictionary<string, object>)row;
+                var pkVal = rowDict.TryGetValue(table.PrimaryKeyColumn, out var pk) ? pk?.ToString() : null;
+                if (pkVal is null) continue;
+
+                changes.Add(new ChangeDto(
+                    mockCursor++,
+                    pkVal,
+                    "created",
+                    rowDict
+                ));
+            }
+
+            return new PullResponse(changes, maxCursor, false);
+        }
 
         var rows = (await configDb.QueryAsync(
             @"SELECT SERVER_CURSOR, ROW_PK, CHANGE_TYPE, RECORD_JSON FROM SYNC_CHANGE
@@ -212,13 +250,13 @@ public sealed class DynamicSyncService(
               ORDER BY SERVER_CURSOR LIMIT @limit",
             new { tableId = table.Id, cursor, limit })).ToList();
 
-        var changes = rows.Select(r => new ChangeDto(
+        var changesList = rows.Select(r => new ChangeDto(
             Convert.ToInt64(r.SERVER_CURSOR), (string)r.ROW_PK, (string)r.CHANGE_TYPE,
             r.RECORD_JSON is null ? null : JsonSerializer.Deserialize<object>((string)r.RECORD_JSON)
         )).ToList();
 
         var next = rows.Count > 0 ? Convert.ToInt64(rows[^1].SERVER_CURSOR) : cursor;
-        return new PullResponse(changes, next, rows.Count == limit);
+        return new PullResponse(changesList, next, rows.Count == limit);
     }
 
     private async Task<SyncTableConfig> ResolveTableAsync(string tableName)

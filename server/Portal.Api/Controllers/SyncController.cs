@@ -26,7 +26,8 @@ public sealed class SyncController(DynamicSyncService syncService) : ControllerB
         [FromQuery] int limit = 100,
         CancellationToken ct = default)
     {
-        var res = await syncService.PullAsync(tableName, cursor, limit, ct);
+        var tenantId = User.FindFirstValue("TenantId");
+        var res = await syncService.PullAsync(tableName, cursor, limit, tenantId, ct);
         return Ok(res);
     }
 }
