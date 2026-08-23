@@ -1,6 +1,6 @@
-﻿using ConnectionDll;
+using ConnectionDll;
 
-namespace Server.Infrastructure.Data.ExternalSources;
+namespace Portal.Infrastructure.Data.ExternalSources;
 
 public class OracleService
 {
@@ -9,5 +9,4 @@ public class OracleService
         var provider = new Class1();
         return provider.oracon.ConnectionString;
     }
-
 }

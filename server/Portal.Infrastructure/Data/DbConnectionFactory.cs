@@ -4,6 +4,7 @@ using Microsoft.Data.Sqlite;
 using DynamicTransaction.Interfaces;
 using Microsoft.Extensions.Configuration;
 using Portal.Domain.Entities;
+using Portal.Infrastructure.Data.ExternalSources;
 
 namespace Portal.Infrastructure.Data;
 
@@ -27,12 +28,12 @@ public class DbConnectionFactory : IDbConnectionFactory
     public IDbConnection Create(string connectionString)
     {
         var provider = DetectProvider(connectionString);
-        IDbConnection conn = provider switch
+        if (provider == DatabaseProvider.Oracle)
         {
-            DatabaseProvider.Oracle => new OracleConnection(connectionString),
-            _ => new SqliteConnection(connectionString)
-        };
-        return conn;
+            var oracleConnStr = new OracleService().GetConnectionString();
+            return new OracleConnection(oracleConnStr);
+        }
+        return new SqliteConnection(connectionString);
     }
 
     public IAsyncDbConnectionWrapper CreateConnection(string? connectionStringOverride = null)
