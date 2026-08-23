@@ -115,5 +115,23 @@ public static class SqliteBootstrap
                 ('admin', 'admin123', 'System Administrator', 'admin,planner,supervisor'),
                 ('planner', 'planner123', 'Lead Planner', 'planner'),
                 ('supervisor', 'supervisor123', 'Area Supervisor', 'supervisor');");
+
+        // Seed Default Oracle Connection using OracleService
+        var oracleCount = db.ExecuteScalar<int>("SELECT COUNT(1) FROM DATA_CONNECTION WHERE PROVIDER = 'oracle'");
+        if (oracleCount == 0)
+        {
+            var oracleConnStr = new ExternalSources.OracleService().GetConnectionString();
+            db.Execute(
+                @"INSERT INTO DATA_CONNECTION (ID, NAME, PROVIDER, CONNECTION_STRING, IS_ACTIVE, CREATED_AT_UTC)
+                  VALUES (@Id, @Name, @Provider, @ConnectionString, 1, @CreatedAt)",
+                new
+                {
+                    Id = "default-oracle-conn",
+                    Name = "Oracle ERP (Default)",
+                    Provider = "oracle",
+                    ConnectionString = oracleConnStr,
+                    CreatedAt = DateTime.UtcNow.ToString("o")
+                });
+        }
     }
 }
