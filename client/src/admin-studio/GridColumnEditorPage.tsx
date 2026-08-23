@@ -20,6 +20,7 @@ interface Row {
 export default function GridColumnEditorPage() {
   const [tables, setTables] = useState<any[]>([]);
   const [selectedTableId, setSelectedTableId] = useState("");
+  const [tableSearch, setTableSearch] = useState("");
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -107,6 +108,8 @@ export default function GridColumnEditorPage() {
     }
   }
 
+  const filteredTables = tables.filter((t) => t.tableName.toLowerCase().includes(tableSearch.toLowerCase()));
+
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div>
@@ -121,10 +124,18 @@ export default function GridColumnEditorPage() {
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="space-y-1.5 max-w-xs">
-            <label className="text-xs font-semibold text-zinc-400">Target Table</label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-zinc-400">Target Table</label>
+              <Input
+                value={tableSearch}
+                onChange={(e) => setTableSearch(e.target.value)}
+                placeholder="Filter tables..."
+                className="h-7 w-40 text-xs px-2 py-0 bg-zinc-950 border-zinc-800"
+              />
+            </div>
             <Select value={selectedTableId} onChange={(e) => setSelectedTableId(e.target.value)}>
               <option value="">Select a table...</option>
-              {tables.map((t) => (
+              {filteredTables.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.tableName}
                 </option>

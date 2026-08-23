@@ -9,6 +9,7 @@ import { Navigation } from "lucide-react";
 export default function PortalSectionsPage() {
   const [tables, setTables] = useState<any[]>([]);
   const [syncTableId, setSyncTableId] = useState("");
+  const [tableSearch, setTableSearch] = useState("");
   const [sectionKey, setSectionKey] = useState("");
   const [label, setLabel] = useState("");
   const [icon, setIcon] = useState("clipboard-list");
@@ -51,6 +52,8 @@ export default function PortalSectionsPage() {
     }
   }
 
+  const filteredTables = tables.filter((t) => t.tableName.toLowerCase().includes(tableSearch.toLowerCase()));
+
   return (
     <div className="space-y-6 max-w-xl mx-auto">
       <div>
@@ -66,10 +69,18 @@ export default function PortalSectionsPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-zinc-400">Target Sync Table</label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-zinc-400">Target Sync Table</label>
+                <Input
+                  value={tableSearch}
+                  onChange={(e) => setTableSearch(e.target.value)}
+                  placeholder="Filter tables..."
+                  className="h-7 w-40 text-xs px-2 py-0 bg-zinc-950 border-zinc-800"
+                />
+              </div>
               <Select value={syncTableId} onChange={(e) => setSyncTableId(e.target.value)} required>
                 <option value="">Select a table...</option>
-                {tables.map((t) => (
+                {filteredTables.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.tableName}
                   </option>
