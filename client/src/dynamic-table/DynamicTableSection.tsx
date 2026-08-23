@@ -10,6 +10,7 @@ import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "../components/ui/card";
 import { Input } from "../components/ui/input";
+import { Checkbox } from "../components/ui/checkbox";
 import { Plus, Trash2, Edit2, AlertTriangle, RefreshCw, X, Save } from "lucide-react";
 import { runSync } from "../sync/syncEngine";
 
@@ -77,9 +78,22 @@ export default function DynamicTableSection({ tableName, syncTableId }: { tableN
         editable: c.isEditable,
         width: c.width || 150,
         valueGetter: (params) => params.data?.data?.[c.columnName],
+        valueFormatter: c.dataType === "boolean"
+          ? (params) => {
+              const val = params.value;
+              if (val === true || val === 1 || val === "true" || val === "1") return "True";
+              return "False";
+            }
+          : undefined,
         valueSetter: (params) => {
           if (!params.data.data) params.data.data = {};
-          params.data.data[c.columnName] = params.newValue;
+          let val = params.newValue;
+          if (c.dataType === "boolean") {
+            val = val === true || val === 1 || String(val).toLowerCase() === "true" || String(val) === "1";
+          } else if (c.dataType === "number") {
+            val = val !== null && val !== undefined && val !== "" ? Number(val) : null;
+          }
+          params.data.data[c.columnName] = val;
           return true;
         }
       }));
@@ -195,22 +209,51 @@ export default function DynamicTableSection({ tableName, syncTableId }: { tableN
                   .filter((c) => c.isVisible && c.isEditable)
                   .map((c) => (
                     <div key={c.columnName} className="space-y-1.5">
-                      <label className="text-xs font-semibold text-zinc-400">{c.displayLabel}</label>
-                      <Input
-                        value={editingRow.data[c.columnName] ?? ""}
-                        onChange={(e) =>
-                          setEditingRow((prev) =>
-                            prev
-                              ? {
-                                  ...prev,
-                                  data: { ...prev.data, [c.columnName]: e.target.value }
-                                }
-                              : null
-                          )
-                        }
-                        type={c.dataType === "number" ? "number" : "text"}
-                        placeholder={`Enter ${c.displayLabel}`}
-                      />
+                      {c.dataType === "boolean" ? (
+                        <div className="flex items-center gap-2 py-1.5">
+                          <Checkbox
+                            id={`field-${c.columnName}`}
+                            checked={
+                              editingRow.data[c.columnName] === true ||
+                              editingRow.data[c.columnName] === 1 ||
+                              String(editingRow.data[c.columnName]).toLowerCase() === "true" ||
+                              String(editingRow.data[c.columnName]) === "1"
+                            }
+                            onChange={(e: any) =>
+                              setEditingRow((prev) =>
+                                prev
+                                  ? {
+                                      ...prev,
+                                      data: { ...prev.data, [c.columnName]: e.target.checked }
+                                    }
+                                  : null
+                              )
+                            }
+                          />
+                          <label htmlFor={`field-${c.columnName}`} className="text-sm font-semibold text-zinc-300 cursor-pointer select-none">
+                            {c.displayLabel}
+                          </label>
+                        </div>
+                      ) : (
+                        <>
+                          <label className="text-xs font-semibold text-zinc-400">{c.displayLabel}</label>
+                          <Input
+                            value={editingRow.data[c.columnName] ?? ""}
+                            onChange={(e) =>
+                              setEditingRow((prev) =>
+                                prev
+                                  ? {
+                                      ...prev,
+                                      data: { ...prev.data, [c.columnName]: e.target.value }
+                                    }
+                                  : null
+                              )
+                            }
+                            type={c.dataType === "number" ? "number" : "text"}
+                            placeholder={`Enter ${c.displayLabel}`}
+                          />
+                        </>
+                      )}
                     </div>
                   ))}
               </CardContent>
@@ -266,7 +309,14 @@ export default function DynamicTableSection({ tableName, syncTableId }: { tableN
                       <div key={c.columnName} className="flex justify-between border-b border-zinc-900 pb-1.5">
                         <span className="text-zinc-500 text-xs font-semibold">{c.displayLabel}</span>
                         <span className="text-zinc-200 font-medium">
-                          {String(row.data?.[c.columnName] ?? "")}
+                          {c.dataType === "boolean"
+                            ? (row.data?.[c.columnName] === true ||
+                               row.data?.[c.columnName] === 1 ||
+                               String(row.data?.[c.columnName]).toLowerCase() === "true" ||
+                               String(row.data?.[c.columnName]) === "1"
+                                 ? "True"
+                                 : "False")
+                            : String(row.data?.[c.columnName] ?? "")}
                         </span>
                       </div>
                     ))}

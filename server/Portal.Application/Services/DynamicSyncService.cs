@@ -18,18 +18,17 @@ public sealed class DynamicSyncService(
         var connection = await repo.GetConnectionAsync(table.ConnectionId)
             ?? throw new InvalidOperationException("Connection not found.");
         var gridColumns = await repo.GetGridColumnsAsync(table.Id);
-        var editableColumns = gridColumns.Where(c => c.IsEditable).Select(c => c.ColumnName).ToList();
 
         var results = new List<OperationResultDto>(request.Operations.Count);
         foreach (var op in request.Operations)
-            results.Add(await ApplyOneAsync(userId, clientId, table, connection, editableColumns, op, ct));
+            results.Add(await ApplyOneAsync(userId, clientId, table, connection, gridColumns, op, ct));
 
         return new PushResponse(results);
     }
 
     private async Task<OperationResultDto> ApplyOneAsync(
         string userId, string clientId, SyncTableConfig table, DataConnection connection,
-        IReadOnlyList<string> editableColumns, SyncOperationDto op, CancellationToken ct)
+        IReadOnlyList<GridColumnConfig> gridColumns, SyncOperationDto op, CancellationToken ct)
     {
         using var configDb = new SqliteConnection(config.GetConnectionString("Default"));
         configDb.Open();
@@ -46,8 +45,8 @@ public sealed class DynamicSyncService(
         {
             result = op.OperationType.ToLowerInvariant() switch
             {
-                "create" when table.AllowCreate => await CreateAsync(configDb, table, provider, connection.ConnectionString, editableColumns, userId, op, ct),
-                "update" when table.AllowUpdate => await UpdateAsync(configDb, table, provider, connection.ConnectionString, editableColumns, userId, op, ct),
+                "create" when table.AllowCreate => await CreateAsync(configDb, table, provider, connection.ConnectionString, gridColumns, userId, op, ct),
+                "update" when table.AllowUpdate => await UpdateAsync(configDb, table, provider, connection.ConnectionString, gridColumns, userId, op, ct),
                 "delete" when table.AllowDelete => await DeleteAsync(configDb, table, provider, connection.ConnectionString, userId, op, ct),
                 _ => new OperationResultDto(op.OperationId, "validationFailed", op.RowPk, $"Operation '{op.OperationType}' is not permitted on this table.")
             };
@@ -80,7 +79,7 @@ public sealed class DynamicSyncService(
 
     private async Task<OperationResultDto> CreateAsync(
         System.Data.IDbConnection configDb, SyncTableConfig table, DatabaseProvider provider, string connectionString, 
-        IReadOnlyList<string> editableColumns, string userId, SyncOperationDto op, CancellationToken ct)
+        IReadOnlyList<GridColumnConfig> gridColumns, string userId, SyncOperationDto op, CancellationToken ct)
     {
         if (op.Payload is null) return new(op.OperationId, "validationFailed", op.RowPk, "Payload is required for create.");
 
@@ -88,11 +87,12 @@ public sealed class DynamicSyncService(
         var columnNames = new List<string> { table.PrimaryKeyColumn };
         var paramMap = new Dictionary<string, object?> { [table.PrimaryKeyColumn] = op.RowPk };
 
+        var editableColumns = gridColumns.Where(c => c.IsEditable).ToList();
         foreach (var col in editableColumns)
         {
-            if (!payload.TryGetProperty(col, out var val)) continue;
-            columnNames.Add(col);
-            paramMap[col] = JsonValueToClr(val);
+            if (!payload.TryGetProperty(col.ColumnName, out var val)) continue;
+            columnNames.Add(col.ColumnName);
+            paramMap[col.ColumnName] = ParseParamValue(val, col.DataType, provider);
         }
 
         var columnList = string.Join(", ", columnNames.Select(c => $"\"{c}\""));
@@ -115,7 +115,7 @@ public sealed class DynamicSyncService(
 
     private async Task<OperationResultDto> UpdateAsync(
         System.Data.IDbConnection configDb, SyncTableConfig table, DatabaseProvider provider, string connectionString,
-        IReadOnlyList<string> editableColumns, string userId, SyncOperationDto op, CancellationToken ct)
+        IReadOnlyList<GridColumnConfig> gridColumns, string userId, SyncOperationDto op, CancellationToken ct)
     {
         if (op.ExpectedVersion is null || op.Payload is null)
             return new(op.OperationId, "validationFailed", op.RowPk, "expectedVersion and payload are required for update.");
@@ -138,11 +138,12 @@ public sealed class DynamicSyncService(
         var setClauses = new List<string>();
         var paramMap = new Dictionary<string, object?> { ["__pk"] = op.RowPk };
 
+        var editableColumns = gridColumns.Where(c => c.IsEditable).ToList();
         foreach (var col in editableColumns)
         {
-            if (!payload.TryGetProperty(col, out var val)) continue;
-            setClauses.Add($"\"{col}\" = {(provider == DatabaseProvider.Oracle ? ":" : "@")}{col}");
-            paramMap[col] = JsonValueToClr(val);
+            if (!payload.TryGetProperty(col.ColumnName, out var val)) continue;
+            setClauses.Add($"\"{col.ColumnName}\" = {(provider == DatabaseProvider.Oracle ? ":" : "@")}{col.ColumnName}");
+            paramMap[col.ColumnName] = ParseParamValue(val, col.DataType, provider);
         }
         if (setClauses.Count == 0) return new(op.OperationId, "validationFailed", op.RowPk, "No editable columns in payload.");
 
@@ -312,6 +313,45 @@ public sealed class DynamicSyncService(
         JsonValueKind.Null => null,
         _ => el.GetRawText()
     };
+
+    private static object? ParseParamValue(JsonElement el, string dataType, DatabaseProvider provider)
+    {
+        if (el.ValueKind == JsonValueKind.Null) return null;
+
+        return dataType.ToLowerInvariant() switch
+        {
+            "boolean" => el.ValueKind switch
+            {
+                JsonValueKind.True => provider == DatabaseProvider.Oracle ? 1 : true,
+                JsonValueKind.False => provider == DatabaseProvider.Oracle ? 0 : false,
+                JsonValueKind.Number => el.GetInt32() != 0 ? (provider == DatabaseProvider.Oracle ? 1 : true) : (provider == DatabaseProvider.Oracle ? 0 : false),
+                JsonValueKind.String => (el.GetString()?.ToLowerInvariant() is "true" or "1" or "yes" or "y") 
+                    ? (provider == DatabaseProvider.Oracle ? 1 : true) 
+                    : (provider == DatabaseProvider.Oracle ? 0 : false),
+                _ => provider == DatabaseProvider.Oracle ? 0 : false
+            },
+            "number" => el.ValueKind switch
+            {
+                JsonValueKind.Number => el.GetDecimal(),
+                JsonValueKind.String => decimal.TryParse(el.GetString(), out var d) ? d : null,
+                _ => null
+            },
+            "date" => el.ValueKind switch
+            {
+                JsonValueKind.String => DateTime.TryParse(el.GetString(), out var dt) ? dt : null,
+                _ => null
+            },
+            _ => el.ValueKind switch
+            {
+                JsonValueKind.String => el.GetString(),
+                JsonValueKind.Number => el.GetDecimal(),
+                JsonValueKind.True => true,
+                JsonValueKind.False => false,
+                JsonValueKind.Null => null,
+                _ => el.GetRawText()
+            }
+        };
+    }
 }
 
 public sealed class SyncConflictException(long serverVersion, object? serverRecord) : Exception
