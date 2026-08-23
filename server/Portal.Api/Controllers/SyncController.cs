@@ -20,7 +20,7 @@ public sealed class SyncController(DynamicSyncService syncService) : ControllerB
             var res = await syncService.PushAsync(username, request.ClientId, request, ct);
             return Ok(res);
         }
-        catch (InvalidOperationException ex)
+        catch (Exception ex)
         {
             return BadRequest(new { message = ex.Message });
         }
@@ -39,7 +39,7 @@ public sealed class SyncController(DynamicSyncService syncService) : ControllerB
             var res = await syncService.PullAsync(tableName, cursor, limit, tenantId, ct);
             return Ok(res);
         }
-        catch (InvalidOperationException ex)
+        catch (Exception ex)
         {
             return BadRequest(new { message = ex.Message });
         }
