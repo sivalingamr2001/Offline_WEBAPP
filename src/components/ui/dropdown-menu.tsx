@@ -20,10 +20,34 @@ function DropdownMenuTrigger({ asChild = false, children, ...props }: React.Comp
     return <Comp type="button" aria-expanded={context.open} onClick={() => context.setOpen((value) => !value)} {...props}>{children}</Comp>
 }
 
-function DropdownMenuContent({ className, children, ...props }: React.ComponentProps<"div"> & { align?: "start" | "center" | "end" }) {
+function DropdownMenuContent({
+    className,
+    children,
+    align = "start",
+    side = "bottom",
+    sideOffset,
+    ...props
+}: React.ComponentProps<"div"> & {
+    align?: "start" | "center" | "end"
+    side?: "top" | "bottom"
+    sideOffset?: number
+}) {
     const context = React.useContext(DropdownContext)
     if (!context?.open) return null
-    return <div role="menu" className={cn("absolute z-50 mt-2 min-w-32 rounded-md border bg-popover p-1 text-popover-foreground shadow-md", className)} {...props}>{children}</div>
+    return (
+        <div
+            role="menu"
+            className={cn(
+                "absolute z-50 min-w-32 rounded-md border bg-popover p-1 text-popover-foreground shadow-md",
+                side === "top" ? "bottom-full mb-2" : "top-full mt-2",
+                align === "end" ? "right-0" : align === "center" ? "left-1/2 -translate-x-1/2" : "left-0",
+                className
+            )}
+            {...props}
+        >
+            {children}
+        </div>
+    )
 }
 
 function DropdownMenuItem({ className, onClick, ...props }: React.ComponentProps<"button">) {
@@ -31,4 +55,19 @@ function DropdownMenuItem({ className, onClick, ...props }: React.ComponentProps
     return <button type="button" role="menuitem" className={cn("flex w-full items-center rounded-sm px-2 py-1.5 text-left text-sm outline-none hover:bg-accent", className)} onClick={(event) => { onClick?.(event); context?.setOpen(false) }} {...props} />
 }
 
-export { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger }
+function DropdownMenuLabel({ className, ...props }: React.ComponentProps<"div">) {
+    return <div className={cn("px-2 py-1.5 text-sm font-semibold", className)} {...props} />
+}
+
+function DropdownMenuSeparator({ className, ...props }: React.ComponentProps<"div">) {
+    return <div className={cn("-mx-1 my-1 h-px bg-muted", className)} {...props} />
+}
+
+export {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+}
